@@ -12,6 +12,7 @@ _called.retrieveCredentials = false;
 _called.clearLogins = false;
 _called.manualFillRequested = ManualFill.NONE;
 let _singleInputEnabledForPage = false;
+let _databaseClosed = true;
 const _maximumInputs = 100;
 
 // Count of detected form fields on the page
@@ -60,7 +61,7 @@ browser.runtime.onMessage.addListener(async function(req, sender) {
             kpxc.settings = response;
             kpxc.initCredentialFields(true);
         } else if (req.action === 'show_password_generator') {
-            kpxcPassword.trigger();
+            kpxcPasswordDialog.trigger();
         } else if (req.action === 'add_username_only_option') {
             kpxc.addToSitePreferences();
         }
@@ -448,7 +449,7 @@ kpxcFields.getUsernameField = function(passwordId, checkDisabled) {
             }
 
             if (kpxc.settings.showLoginFormIcon) {
-                kpxcUsernameField.initField(usernameField);
+                kpxcUsernameIcons.newIcon(usernameField);
             }
             usernameField = i;
         }
@@ -506,8 +507,7 @@ kpxcFields.getPasswordField = function(usernameId, checkDisabled) {
             passwordField = null;
         }
 
-        kpxcPassword.init(kpxc.settings.usePasswordGeneratorIcons);
-        kpxcPassword.initField(passwordField);
+        kpxcPasswordIcons.newIcon(kpxc.settings.usePasswordGeneratorIcons, passwordField, [], undefined, _databaseClosed);
     } else {
         // Search all inputs on page
         const inputs = kpxcFields.getAllFields();
@@ -557,14 +557,8 @@ kpxcFields.prepareCombinations = async function(combinations) {
         // If no username field is found, handle the single password field as such
         const usernameField = c.username ? _f(c.username) : field;
 
-        // Change icon for username field
-        const res = await browser.runtime.sendMessage({
-            action: 'get_status',
-            args: [ true ]
-        });
-
         if (kpxc.settings.showLoginFormIcon) {
-            kpxcUsernameField.initField(usernameField, res.databaseClosed);
+            kpxcUsernameIcons.newIcon(usernameField, _databaseClosed);
         }
 
         // Initialize form-submit for remembering credentials
@@ -857,8 +851,9 @@ kpxc.clearAllFromPage = function() {
 
 // Switch credentials if database is changed or closed
 kpxc.detectDatabaseChange = async function(response) {
+    _databaseClosed = true;
     kpxc.clearAllFromPage();
-    kpxcUsernameField.switchIcon(true);
+    kpxc.switchIcons(true);
 
     if (document.visibilityState !== 'hidden') {
         if (response.new !== '' && response.new !== response.old) {
@@ -868,7 +863,8 @@ kpxc.detectDatabaseChange = async function(response) {
             });
             kpxc.settings = settings;
             await kpxc.initCredentialFields(true);
-            kpxcUsernameField.switchIcon(false); // Unlocked
+            kpxc.switchIcons(false); // Unlocked
+            _databaseClosed = false;
 
             // If user has requested a manual fill through context menu the actual credential filling
             // is handled here when the opened database has been regognized. It's not a pretty hack.
@@ -916,8 +912,16 @@ kpxc.initCredentialFields = async function(forceCall) {
         return;
     }
 
+    // Update database closed status
+    const res = await browser.runtime.sendMessage({
+        action: 'get_status',
+        args: [ true ]
+    });
+    _databaseClosed = res.databaseClosed;
+
     kpxcFields.prepareVisibleFieldsWithID('select');
     kpxc.initPasswordGenerator(inputs);
+    kpxc.initOTPFields(inputs);
 
     if (!kpxcFields.useDefinedCredentialFields()) {
         // Get all combinations of username + password fields
@@ -952,11 +956,17 @@ kpxc.initCredentialFields = async function(forceCall) {
 };
 
 kpxc.initPasswordGenerator = function(inputs) {
-    kpxcPassword.init(kpxc.settings.usePasswordGeneratorIcons);
-
     for (let i = 0; i < inputs.length; i++) {
         if (inputs[i] && inputs[i].getLowerCaseAttribute('type') === 'password') {
-            kpxcPassword.initField(inputs[i], inputs, i);
+            kpxcPasswordIcons.newIcon(kpxc.settings.usePasswordGeneratorIcons, inputs[i], inputs, i, _databaseClosed);
+        }
+    }
+};
+
+kpxc.initOTPFields = function(inputs, databaseClosed) {
+    for (const i of inputs) {
+        if (i.id.includes('otp') || i.name.includes('otp')) {
+            kpxcTOTPIcons.newIcon(i, _databaseClosed);
         }
     }
 };
@@ -1236,8 +1246,8 @@ kpxc.fillInFromActiveElement = function(suppressWarnings, passOnly = false) {
     kpxc.fillInCredentials(combination, passOnly, suppressWarnings);
 };
 
-kpxc.fillInFromActiveElementTOTPOnly = async function() {
-    const el = document.activeElement;
+kpxc.fillInFromActiveElementTOTPOnly = async function(target) {
+    const el = target || document.activeElement;
     kpxcFields.setUniqueId(el);
     const fieldId = kpxcFields.prepareId(el.getAttribute('data-kpxc-id'));
 
@@ -1748,6 +1758,13 @@ kpxc.getDocumentLocation = function() {
     return kpxc.settings.saveDomainOnly ? document.location.origin : document.location.href;
 };
 
+// Sets the icons to corresponding database lock status
+kpxc.switchIcons = function(locked) {
+    kpxcUsernameIcons.switchIcon(locked);
+    kpxcPasswordIcons.switchIcon(locked);
+    kpxcTOTPIcons.switchIcon(locked);
+};
+
 
 const kpxcEvents = {};
 
@@ -1774,7 +1791,7 @@ kpxcEvents.triggerActivatedTab = async function() {
 
     // Update username field lock state
     const state = await browser.runtime.sendMessage({ action: 'check_database_hash' });
-    kpxcUsernameField.switchIcon(state === '');
+    kpxc.switchIcons(state === '');
 
     // initCredentialFields calls also "retrieve_credentials", to prevent it
     // check of init() was already called

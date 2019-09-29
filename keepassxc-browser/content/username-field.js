@@ -1,18 +1,46 @@
 'use strict';
 
-var kpxcUsernameField = {};
-kpxcUsernameField.icon = null;
-kpxcUsernameField.inputField = null;
+var kpxcUsernameIcons = {};
+kpxcUsernameIcons.icons = [];
 
-try {
-    kpxcUsernameField.observer = new IntersectionObserver((entries) => {
-        kpxcUI.updateFromIntersectionObserver(kpxcUsernameField, entries);
-    });
-} catch (err) {
-    console.log(err);
-}
+kpxcUsernameIcons.newIcon = function(field, databaseClosed = true) {
+    kpxcUsernameIcons.icons.push(new UsernameFieldIcon(field, databaseClosed));
+};
 
-kpxcUsernameField.initField = function(field, databaseClosed = true) {
+kpxcUsernameIcons.switchIcon = function(locked) {
+    kpxcUsernameIcons.icons.forEach(u => u.switchIcon(locked));
+};
+
+
+class UsernameFieldIcon extends Icon {
+    constructor(field, databaseClosed = true) {
+        super();
+        this.databaseClosed = databaseClosed;
+        this.icon = null;
+        this.inputField = null;
+
+        this.initField(field,);
+        kpxcUI.monitorIconPosition(this);
+    }
+
+    switchIcon(locked) {
+        if (!this.icon) {
+            return;
+        }
+    
+        if (locked) {
+            this.icon.classList.remove(getIconClassName());
+            this.icon.classList.add(getIconClassName(true));
+            this.icon.title = tr('usernameLockedFieldText');
+        } else {
+            this.icon.classList.remove(getIconClassName(true));
+            this.icon.classList.add(getIconClassName());
+            this.icon.title = tr('usernameFieldText');
+        }
+    }
+};
+
+UsernameFieldIcon.prototype.initField = function(field) {
     if (!field || field.getAttribute('kpxc-username-field') === 'true') {
         return;
     }
@@ -20,47 +48,29 @@ kpxcUsernameField.initField = function(field, databaseClosed = true) {
     field.setAttribute('kpxc-username-field', 'true');
 
     // Observer the visibility
-    if (kpxcUsernameField.observer) {
-        kpxcUsernameField.observer.observe(field);
+    if (this.observer) {
+        this.observer.observe(field);
     }
 
-    createIcon(field, databaseClosed);
-    kpxcUsernameField.inputField = field;
+    this.createIcon(field);
+    this.inputField = field;
 };
 
-kpxcUsernameField.switchIcon = function(locked) {
-    const icons = $('.kpxc-username-icon');
-    if (!icons || icons.length === 0) {
-        return;
-    }
-    const icon = icons;
-
-    if (locked) {
-        icon.classList.remove(getIconClassName());
-        icon.classList.add(getIconClassName(true));
-        icon.title = tr('usernameLockedFieldText');
-    } else {
-        icon.classList.remove(getIconClassName(true));
-        icon.classList.add(getIconClassName());
-        icon.title = tr('usernameFieldText');
-    }
-};
-
-const createIcon = function(target, databaseClosed) {
+UsernameFieldIcon.prototype.createIcon = function(target) {
     // Remove any existing password generator icons from the input field
     if (target.getAttribute('kpxc-password-generator')) {
-        kpxcPassword.removeIcon(target);
+        kpxcPasswordDialog.removeIcon(target);
     }
 
     const field = target;
-    const className = getIconClassName(databaseClosed);
+    const className = getIconClassName(this.databaseClosed);
 
     // Size the icon dynamically, but not greater than 24 or smaller than 14
     const size = Math.max(Math.min(24, field.offsetHeight - 4), 14);
     
     // Don't create the icon if the input field is too small
     if (field.offsetWidth < (size * 1.5) || field.offsetHeight < size) {
-        kpxcUsernameField.observer.unobserve(field);
+        this.observer.unobserve(field);
         return;
     }
 
@@ -69,7 +79,7 @@ const createIcon = function(target, databaseClosed) {
 
     const icon = kpxcUI.createElement('div', 'kpxc kpxc-username-icon ' + className,
         {
-            'title': databaseClosed ? tr('usernameLockedFieldText') : tr('usernameFieldText'),
+            'title': this.databaseClosed ? tr('usernameLockedFieldText') : tr('usernameFieldText'),
             'alt': tr('usernameFieldIcon'),
             'size': size,
             'offset': offset,
@@ -79,43 +89,46 @@ const createIcon = function(target, databaseClosed) {
     icon.style.width = Pixels(size);
     icon.style.height = Pixels(size);
 
-    icon.addEventListener('click', async function(e) {
+    icon.addEventListener('click', function(e) {
         if (!e.isTrusted) {
             return;
         }
 
         e.preventDefault();
-
-        if (!kpxcFields.isVisible(field)) {
-            document.body.removeChild(icon);
-            field.removeAttribute('kpxc-username-field');
-            return;
-        }
-
-        const connected = await browser.runtime.sendMessage({ action: 'is_connected' });
-        if (!connected) {
-            kpxcUI.createNotification('error', tr('errorNotConnected'));
-            return;
-        }
-
-        const databaseHash = await browser.runtime.sendMessage({ action: 'check_database_hash' });
-        if (databaseHash === '') {
-            // Triggers database unlock
-            _called.manualFillRequested = ManualFill.BOTH;
-            await browser.runtime.sendMessage({
-                action: 'get_database_hash',
-                args: [ false, true ] // Set triggerUnlock to true
-            });
-        }
-
-        if (icon.className.includes('unlock')) {
-            fillCredentials();
-        }
+        iconClicked(field, icon);
     });
 
     kpxcUI.setIconPosition(icon, field);
-    kpxcUsernameField.icon = icon;
+    this.icon = icon;
     document.body.appendChild(icon);
+};
+
+const iconClicked = async function(field, icon) {
+    if (!kpxcFields.isVisible(field)) {
+        document.body.removeChild(icon);
+        field.removeAttribute('kpxc-username-field');
+        return;
+    }
+
+    const connected = await browser.runtime.sendMessage({ action: 'is_connected' });
+    if (!connected) {
+        kpxcUI.createNotification('error', tr('errorNotConnected'));
+        return;
+    }
+
+    const databaseHash = await browser.runtime.sendMessage({ action: 'check_database_hash' });
+    if (databaseHash === '') {
+        // Triggers database unlock
+        _called.manualFillRequested = ManualFill.BOTH;
+        await browser.runtime.sendMessage({
+            action: 'get_database_hash',
+            args: [ false, true ] // Set triggerUnlock to true
+        });
+    }
+
+    if (icon.className.includes('unlock')) {
+        fillCredentials(field);
+    }
 };
 
 const getIconClassName = function(locked = false) {
@@ -125,22 +138,12 @@ const getIconClassName = function(locked = false) {
     return (isFirefox() ? 'unlock-moz' : 'unlock');
 };
 
-const fillCredentials = function() {
-    const fieldId = kpxcUsernameField.inputField.getAttribute('data-kpxc-id');
+const fillCredentials = function(field) {
+    const fieldId = field.getAttribute('data-kpxc-id');
     kpxcFields.prepareId(fieldId);
 
-    const givenType = kpxcUsernameField.inputField.type === 'password' ? 'password' : 'username';
+    const givenType = field.type === 'password' ? 'password' : 'username';
     const combination = kpxcFields.getCombination(givenType, fieldId);
 
     kpxc.fillInCredentials(combination, givenType === 'password', false);
 };
-
-// Handle icon position on window resize
-window.addEventListener('resize', function(e) {
-    kpxcUI.updateIconPosition(kpxcUsernameField);
-});
-
-// Handle icon position on scroll
-window.addEventListener('scroll', function(e) {
-    kpxcUI.updateIconPosition(kpxcUsernameField);
-});

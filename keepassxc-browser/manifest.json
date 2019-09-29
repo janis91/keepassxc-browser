@@ -54,15 +54,16 @@
             ],
             "js": [
                 "browser-polyfill.min.js",
+                "global.js",
+                "content/ui.js",
                 "content/banner.js",
                 "content/autocomplete.js",
                 "content/define.js",
                 "content/keepassxc-browser.js",
                 "content/pwgen.js",
                 "content/sites.js",
-                "content/ui.js",
-                "content/username-field.js",
-                "global.js"
+                "content/totp-field.js",
+                "content/username-field.js"
             ],
             "css": [
                 "css/autocomplete.css",
@@ -71,6 +72,7 @@
                 "css/define.css",
                 "css/notification.css",
                 "css/pwgen.css",
+                "css/totp.css",
                 "css/username.css"
             ],
             "run_at": "document_idle",
@@ -110,7 +112,8 @@
     "web_accessible_resources": [
         "icons/keepassxc.svg",
         "icons/key.svg",
-        "icons/locked.svg"
+        "icons/locked.svg",
+        "icons/otp.svg"
     ],
     "permissions": [
         "activeTab",

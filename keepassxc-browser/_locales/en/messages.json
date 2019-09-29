@@ -167,6 +167,14 @@
         "message": "Username field icon",
         "description": "Username field icon text."
     },
+    "totpFieldText": {
+        "message": "Fill TOTP from KeePassXC",
+        "description": "OTP field icon hover text."
+    },
+    "totpFieldIcon": {
+        "message": "TOTP field icon",
+        "description": "OTP field icon text."
+    },
     "defineDismiss": {
         "message": "Dismiss",
         "description": "Dismiss button text when choosing custom login fields."

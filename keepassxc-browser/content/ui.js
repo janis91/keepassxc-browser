@@ -10,6 +10,31 @@ var Pixels = function(value) {
     return String(value) + 'px';
 };
 
+// Basic icon class
+class Icon {
+    constructor() {
+        try {
+            this.observer = new IntersectionObserver((entries) => {
+                kpxcUI.updateFromIntersectionObserver(this, entries);
+            });
+        } catch (err) {
+            console.log(err);
+        }
+    }
+
+    switchIcon(locked) {
+        if (!this.icon) {
+            return;
+        }
+    
+        if (locked) {
+           this.icon.style.filter = 'saturate(0%)';
+        } else {
+            this.icon.style.filter = 'saturate(100%)';
+        }
+    }
+};
+
 var kpxcUI = {};
 
 // Wrapper for creating elements
@@ -34,6 +59,18 @@ kpxcUI.createElement = function(type, classes, attributes, textContent) {
     }
 
     return element;
+};
+
+kpxcUI.monitorIconPosition = function(iconClass) {
+    // Handle icon position on resize
+    window.addEventListener('resize', function(e) {
+        kpxcUI.updateIconPosition(iconClass);
+    });
+
+    // Handle icon position on scroll
+    window.addEventListener('scroll', function(e) {
+        kpxcUI.updateIconPosition(iconClass);
+    });
 };
 
 kpxcUI.updateIconPosition = function(iconClass) {
@@ -62,6 +99,7 @@ kpxcUI.setIconPosition = function(icon, field) {
 kpxcUI.updateFromIntersectionObserver = function(iconClass, entries) {
     for (const entry of entries) {
         const rect = DOMRectToArray(entry.boundingClientRect);
+        const temp = entry.target.closest('.kpxc-username-icon');
 
         if ((entry.intersectionRatio === 0 && !entry.isIntersecting) || (rect.some(x => x < -10))) {
             iconClass.icon.style.display = 'none';
@@ -115,13 +153,13 @@ const DOMRectToArray = function(domRect) {
 
 // Enables dragging
 document.addEventListener('mousemove', function(e) {
-    if (kpxcPassword.selected === kpxcPassword.titleBar) {
-        const xPos = e.clientX - kpxcPassword.diffX;
-        const yPos = e.clientY - kpxcPassword.diffY;
+    if (kpxcPasswordDialog.selected === kpxcPasswordDialog.titleBar) {
+        const xPos = e.clientX - kpxcPasswordDialog.diffX;
+        const yPos = e.clientY - kpxcPasswordDialog.diffY;
 
-        if (kpxcPassword.selected !== null) {
-            kpxcPassword.dialog.style.left = Pixels(xPos);
-            kpxcPassword.dialog.style.top = Pixels(yPos);
+        if (kpxcPasswordDialog.selected !== null) {
+            kpxcPasswordDialog.dialog.style.left = Pixels(xPos);
+            kpxcPasswordDialog.dialog.style.top = Pixels(yPos);
         }
     }
 
@@ -137,7 +175,7 @@ document.addEventListener('mousemove', function(e) {
 });
 
 document.addEventListener('mouseup', function() {
-    kpxcPassword.selected = null;
+    kpxcPasswordDialog.selected = null;
     kpxcDefine.selected = null;
 });
 
